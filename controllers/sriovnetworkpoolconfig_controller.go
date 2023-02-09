@@ -126,8 +126,10 @@ func (r *SriovNetworkPoolConfigReconciler) syncOvsHardwareOffloadMachineConfigs(
 
 	mcpName := nc.Spec.OvsHardwareOffloadConfig.Name
 	mcName := "00-" + mcpName + "-" + constants.OVSHWOLMachineConfigNameSuffix
+	mcCleanUpName := "00-" + mcpName + "-cleanup-" + constants.OVSHWOLMachineConfigNameSuffix
 
 	foundMC := &mcfgv1.MachineConfig{}
+	// foundCleanUpMC := &mcfgv1.MachineConfig{}
 	mcp := &mcfgv1.MachineConfigPool{}
 
 	if mcpName == "" {
@@ -152,12 +154,26 @@ func (r *SriovNetworkPoolConfigReconciler) syncOvsHardwareOffloadMachineConfigs(
 	if err != nil {
 		return err
 	}
+	mcCleanUp, err := render.GenerateMachineConfig("bindata/manifests/switchdev-config", mcCleanUpName, mcpName, false, &data)
+	if err != nil {
+		return err
+	}
+	// alt: could just check if deletion, if so, instead of adding ovsoffload add ovs-disable-offload to existing mcp
+	// although we don't want switchdev units in clean up
+	// 00-offload gets deleted before it would be applied
 
 	err = r.Get(context.TODO(), types.NamespacedName{Name: mcName}, foundMC)
+	// err2 := r.Get(context.TODO(), types.NamespacedName{Name: mcCleanUpName}, foundMC)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if deletion {
 				logger.Info("MachineConfig has already been deleted")
+				// case mc is deleted, we still want to add clean up
+				// add it here too
+				err = r.Create(context.TODO(), mcCleanUp)
+				if err != nil {
+					return fmt.Errorf("###debug### couldn't create Clean up Machine config during deletion: %v", err)
+				}
 			} else {
 				err = r.Create(context.TODO(), mc)
 				if err != nil {
@@ -175,6 +191,18 @@ func (r *SriovNetworkPoolConfigReconciler) syncOvsHardwareOffloadMachineConfigs(
 			if err != nil {
 				return fmt.Errorf("couldn't delete MachineConfig: %v", err)
 			}
+			// if errors.IsNotFound(err2) {
+			err = r.Create(context.TODO(), mcCleanUp)
+			if err != nil {
+				return fmt.Errorf("###debug### couldn't update with Clean up Machine config: %v", err)
+			}
+			// dont think we should ever need to update, just create once
+			// } else {
+			// 	err = r.Update(context.TODO(), mcCleanUp)
+			// 	if err != nil {
+			// 		return fmt.Errorf("###### couldn't update with Clean up Machine config: %v", err)
+			// 	}
+			// }
 		} else {
 			var foundIgn, renderedIgn interface{}
 			// The Raw config JSON string may have the fields reordered.

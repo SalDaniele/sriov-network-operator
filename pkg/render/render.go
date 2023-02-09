@@ -39,6 +39,7 @@ type DeviceInfo struct {
 const (
 	filesDir          = "files"
 	ovsUnitsDir       = "ovs-units"
+	cleanUpDir        = "cleanup-units"
 	switchdevUnitsDir = "switchdev-units"
 )
 
@@ -173,7 +174,18 @@ func GenerateMachineConfig(path, name, mcRole string, ovsOffload bool, d *Render
 		}
 	}
 
-	if ovsOffload {
+	if !ovsOffload {
+		p = filepath.Join(path, cleanUpDir)
+		exists, err = existsDir(p)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			if err := filterTemplates(units, p, d); err != nil {
+				return nil, err
+			}
+		}
+	} else {
 		p = filepath.Join(path, ovsUnitsDir)
 		exists, err = existsDir(p)
 		if err != nil {
@@ -184,16 +196,16 @@ func GenerateMachineConfig(path, name, mcRole string, ovsOffload bool, d *Render
 				return nil, err
 			}
 		}
-	}
 
-	p = filepath.Join(path, switchdevUnitsDir)
-	exists, err = existsDir(p)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		if err := filterTemplates(units, p, d); err != nil {
+		p = filepath.Join(path, switchdevUnitsDir)
+		exists, err = existsDir(p)
+		if err != nil {
 			return nil, err
+		}
+		if exists {
+			if err := filterTemplates(units, p, d); err != nil {
+				return nil, err
+			}
 		}
 	}
 

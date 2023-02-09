@@ -192,7 +192,7 @@ func main() {
 	// Remove all finalizers after controller is shut down
 	defer utils.Shutdown()
 
-	setupLog.Info("starting manager")
+	setupLog.Info("starting manager WITH CUSTOM SDANIELE CODE CHANGESv3")
 	if err := mgr.Start(stopCh); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
