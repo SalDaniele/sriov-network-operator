@@ -129,7 +129,7 @@ func (r *SriovNetworkPoolConfigReconciler) syncOvsHardwareOffloadMachineConfigs(
 	mcCleanUpName := "00-" + mcpName + "-cleanup-" + constants.OVSHWOLMachineConfigNameSuffix
 
 	foundMC := &mcfgv1.MachineConfig{}
-	// foundCleanUpMC := &mcfgv1.MachineConfig{}
+	foundCleanUpMC := &mcfgv1.MachineConfig{}
 	mcp := &mcfgv1.MachineConfigPool{}
 
 	if mcpName == "" {
@@ -154,27 +154,37 @@ func (r *SriovNetworkPoolConfigReconciler) syncOvsHardwareOffloadMachineConfigs(
 	if err != nil {
 		return err
 	}
+	// TODO: Only render if it will be required
 	mcCleanUp, err := render.GenerateMachineConfig("bindata/manifests/switchdev-config", mcCleanUpName, mcpName, false, &data)
 	if err != nil {
 		return err
 	}
-	// alt: could just check if deletion, if so, instead of adding ovsoffload add ovs-disable-offload to existing mcp
-	// although we don't want switchdev units in clean up
-	// 00-offload gets deleted before it would be applied
 
 	err = r.Get(context.TODO(), types.NamespacedName{Name: mcName}, foundMC)
-	// err2 := r.Get(context.TODO(), types.NamespacedName{Name: mcCleanUpName}, foundMC)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if deletion {
 				logger.Info("MachineConfig has already been deleted")
 				// case mc is deleted, we still want to add clean up
-				// add it here too
 				err = r.Create(context.TODO(), mcCleanUp)
 				if err != nil {
 					return fmt.Errorf("###debug### couldn't create Clean up Machine config during deletion: %v", err)
 				}
 			} else {
+				// Before we create our MC, delete the potential remaining mc from previous cleanup
+				err = r.Get(context.TODO(), types.NamespacedName{Name: mcCleanUpName}, foundCleanUpMC)
+				if err == nil {
+					logger.Info("###debug### Found previous 00-cleanup mc, deleting prior to creating new one")
+					err = r.Delete(context.TODO(), foundCleanUpMC)
+					if err != nil {
+						return fmt.Errorf("###debug-error### couldn't delete clean up when starting SriovPoolConfig: %v", err)
+					}
+				} else {
+					if !errors.IsNotFound(err) {
+						return fmt.Errorf("###debug-error### Unexpected error when trying to find 00-Cleanup: %v", err)
+					}
+					logger.Info("###debug### No previous 00-cleanup was found")
+				}
 				err = r.Create(context.TODO(), mc)
 				if err != nil {
 					return fmt.Errorf("couldn't create MachineConfig: %v", err)
@@ -191,12 +201,11 @@ func (r *SriovNetworkPoolConfigReconciler) syncOvsHardwareOffloadMachineConfigs(
 			if err != nil {
 				return fmt.Errorf("couldn't delete MachineConfig: %v", err)
 			}
-			// if errors.IsNotFound(err2) {
 			err = r.Create(context.TODO(), mcCleanUp)
 			if err != nil {
 				return fmt.Errorf("###debug### couldn't update with Clean up Machine config: %v", err)
 			}
-			// dont think we should ever need to update, just create once
+			// TODO: dont think we should ever need to update, just create once, but might need to add this
 			// } else {
 			// 	err = r.Update(context.TODO(), mcCleanUp)
 			// 	if err != nil {
