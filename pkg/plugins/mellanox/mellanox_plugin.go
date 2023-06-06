@@ -168,6 +168,7 @@ func (p *MellanoxPlugin) OnNodeStateChange(new *sriovnetworkv1.SriovNetworkNodeS
 
 	if needReboot {
 		needDrain = true
+		glog.V(2).Infof("SD DEBUG reboot needed")
 	}
 	glog.V(2).Infof("mellanox-plugin needDrain %v needReboot %v", needDrain, needReboot)
 	return
@@ -180,7 +181,21 @@ func (p *MellanoxPlugin) Apply() error {
 		return nil
 	}
 	glog.Info("mellanox-plugin Apply()")
-	return configFW()
+	if err := configFW(); err != nil {
+		glog.V(2).Infof("SD DEBUG FAILED config fw")
+		return err
+	} else {
+		glog.Info("SD DEBUG configFW successful")
+		glog.V(2).Infof("SD DEBUG configFW successful")
+	}
+	if err := resetFW(); err != nil {
+		glog.V(2).Infof("SD DEBUG FAILED reset fw")
+		return err
+	} else {
+		glog.Info("SD DEBUG resetFW successful")
+		glog.V(2).Infof("SD DEBUG resetFW successful")
+	}
+	return nil
 }
 
 func configFW() error {
@@ -209,6 +224,23 @@ func configFW() error {
 		_, err := utils.RunCommand("mstconfig", cmdArgs...)
 		if err != nil {
 			glog.Errorf("mellanox-plugin configFW(): failed : %v", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func resetFW() error {
+	glog.Info("SD DEBUG mellanox-plugin resetFW()")
+	glog.V(2).Infof("SD DEBUG mellanox-plugin resetFW()")
+	for pciAddr, _ := range attributesToChange {
+		cmdArgs := []string{"-d", pciAddr, "-y", "reset"}
+
+		glog.V(2).Infof("SD DEBUG mellanox-plugin: resetFW(): %v", cmdArgs)
+
+		_, err := utils.RunCommand("mstfwreset", cmdArgs...)
+		if err != nil {
+			glog.Errorf("SD DEBUG mellanox-plugin resetFW(): failed : %v", err)
 			return err
 		}
 	}

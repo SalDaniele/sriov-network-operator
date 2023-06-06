@@ -776,6 +776,7 @@ func IsKernelLockdownMode(chroot bool) bool {
 // RunCommand runs a command
 func RunCommand(command string, args ...string) (string, error) {
 	glog.Infof("RunCommand(): %s %v", command, args)
+	glog.V(2).Infof("SD DEBUG RunCommand(): %s %v", command, args)
 	var stdout, stderr bytes.Buffer
 
 	cmd := exec.Command(command, args...)
