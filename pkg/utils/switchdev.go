@@ -107,3 +107,13 @@ func WriteSwitchdevConfFile(newState *sriovnetworkv1.SriovNetworkNodeState) (upd
 	}
 	return
 }
+
+func SwitchdevDeviceExists(state *sriovnetworkv1.SriovNetworkNodeState) bool {
+	for _, iface := range state.Spec.Interfaces {
+		if iface.EswitchMode == sriovnetworkv1.ESwithModeSwitchDev {
+			glog.V(2).Infof("SwitchdevDeviceExists(): detected switchdev interface %+v", iface)
+			return true
+		}
+	}
+	return false
+}

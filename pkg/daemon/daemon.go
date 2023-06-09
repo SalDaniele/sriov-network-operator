@@ -491,6 +491,15 @@ func (dn *Daemon) nodeStateSyncHandler() error {
 			}
 		}
 	}
+
+	d, r, err := trySetOvsHWOL(utils.SwitchdevDeviceExists(latestState))
+	if err != nil {
+		glog.Errorf("nodeStateSyncHandler(): Failed to set OpenvSwitch offload error: %v", err)
+		return err
+	}
+	reqDrain = reqDrain || d
+	reqReboot = reqReboot || r
+
 	if dn.openshiftContext.IsOpenshiftCluster() && !dn.openshiftContext.IsHypershift() {
 		if err = dn.getNodeMachinePool(); err != nil {
 			return err
@@ -1078,4 +1087,43 @@ func tryCreateNMUdevRule() error {
 		return err
 	}
 	return nil
+}
+
+func trySetOvsHWOL(newState bool) (bool, bool, error) {
+	glog.V(2).Infof("trySetOvsHWOL()")
+	desiredState := strconv.FormatBool(newState)
+	var output bytes.Buffer
+	var currentState string
+
+	exit, err := utils.Chroot("/host")
+	if err != nil {
+		glog.Errorf("trySetOvsHWOL(): failed to chroot to host: %v", err)
+		return false, false, err
+	}
+	defer exit()
+
+	// if we are already in desired state, do nothing
+	cmd := exec.Command("ovs-vsctl", "get", "Open_vSwitch", ".", "other_config:hw-offload")
+	cmd.Stdout = &output
+	if err := cmd.Run(); err != nil {
+		// if ovs has not previously been configured this record may not yet exist
+		glog.Errorf("trySetOvsHWOL(): failed to get current Open_vSwitch hw-offload mode : %v", err)
+		currentState = "false"
+	} else {
+		currentState = output.String()
+	}
+
+	if strings.Contains(currentState, desiredState) {
+		glog.V(2).Infof("trySetOvsHWOL(): ovs already in desired state %s, ovs switch not needed", desiredState)
+		return false, false, nil
+	}
+
+	// otherwise switch state and reboot to apply the config changes to ovs
+	glog.V(2).Infof("trySetOvsHWOL(): switching Open_vSwitch hw-offload from %s to %s", currentState, desiredState)
+	cmd = exec.Command("ovs-vsctl", "set", "Open_vSwitch", ".", fmt.Sprintf("other_config:hw-offload=%s", desiredState))
+	if err := cmd.Run(); err != nil {
+		glog.Errorf("trySetOvsHWOL(): ovs-vsctl set OpenvSwitch offload %s: failed: %v", desiredState, err)
+		return false, false, err
+	}
+	return true, true, nil
 }
